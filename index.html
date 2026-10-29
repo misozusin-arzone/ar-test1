@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>과천 송이·율이 AR 스마트 포토존</title>
+  <!-- 구글 Model Viewer 라이브러리 (앱 프리 WebAR 구동) -->
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html { width: 100%; height: 100%; overflow: hidden; font-family: -apple-system, sans-serif; background: #000; }
+
+    /* 3D 뷰어 및 AR 영역 */
+    model-viewer {
+      width: 100vw;
+      height: 100vh;
+      --poster-color: transparent;
+    }
+
+    /* 상단 지자체 타이틀 바 */
+    .header-bar {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      right: 16px;
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 10px 16px;
+      border-radius: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      z-index: 10;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .header-title { font-size: 14px; font-weight: 700; color: #2D3748; }
+    .header-badge { font-size: 11px; background: #48BB78; color: #fff; padding: 3px 8px; border-radius: 10px; }
+
+    /* 하단 인터랙션 및 촬영 컨트롤 */
+    .controls {
+      position: absolute;
+      bottom: 24px;
+      left: 0;
+      right: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      z-index: 10;
+    }
+
+    /* 포즈/사운드 선택 버튼 */
+    .preset-container {
+      display: flex;
+      gap: 8px;
+      background: rgba(0,0,0,0.4);
+      padding: 6px 12px;
+      border-radius: 24px;
+      backdrop-filter: blur(4px);
+    }
+    .btn-preset {
+      background: #fff;
+      border: none;
+      padding: 6px 14px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #333;
+      cursor: pointer;
+    }
+    .btn-preset.active { background: #3182CE; color: #fff; }
+
+    /* AR 진입 및 캡처 버튼 */
+    .btn-action-group {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+    .btn-ar {
+      background: #E53E3E;
+      color: #fff;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 28px;
+      font-size: 15px;
+      font-weight: bold;
+      box-shadow: 0 4px 14px rgba(229,62,62,0.4);
+      cursor: pointer;
+    }
+    .btn-capture {
+      background: #fff;
+      color: #2D3748;
+      border: 3px solid #E2E8F0;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      cursor: pointer;
+    }
+
+    /* 촬영 미리보기 모달 */
+    #preview-modal {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.9);
+      z-index: 100;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #preview-img { max-width: 90%; max-height: 70%; border-radius: 12px; margin-bottom: 16px; }
+    .btn-close { background: #fff; border: none; padding: 8px 20px; border-radius: 20px; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <!-- 상단 지자체 브랜드 바 -->
+  <div class="header-bar">
+    <span class="header-title">과천시 시 승격 40주년 기념 AR 포토존</span>
+    <span class="header-badge">송이·율이 체험관</span>
+  </div>
+
+  <!-- Google Model Viewer (WebAR 및 3D 렌더링) -->
+  <!-- 테스트용 공개 3D 모델(우주비행사) 적용 -> 향후 송이/율이 .glb 파일로 교체 -->
+  <model-viewer id="ar-viewer"
+    src="https://modelviewer.dev/shared-assets/models/Astronaut.glb"
+    ar
+    ar-modes="webxr scene-viewer quick-look"
+    camera-controls
+    auto-rotate
+    shadow-intensity="1"
+    alt="과천시 캐릭터 3D 모델">
+  </model-viewer>
+
+  <!-- 하단 제어부 -->
+  <div class="controls">
+    <!-- 포즈 및 음성 프리셋 인터랙션 -->
+    <div class="preset-container">
+      <button class="btn-preset active" onclick="changePose('idle', '반가워요! 과천에 오신 것을 환영해요!')">기본 인사</button>
+      <button class="btn-preset" onclick="changePose('heart', '송이, 율이와 함께 찰칵! 사랑해요!')">하트 포즈</button>
+      <button class="btn-preset" onclick="changePose('celebrate', '과천시 40주년을 축하해주세요!')">축하 댄스</button>
+    </div>
+
+    <div class="btn-action-group">
+      <!-- 실시간 카메라 AR 진입 버튼 (지원 모바일 브라우저에서 기본 카메라로 투샷 배치) -->
+      <button class="btn-ar" onclick="activateAR()">내 방/현장에 소환하기 (AR)</button>
+      <!-- 화면 캡처 및 포토 프레임 합성 버튼 -->
+      <button class="btn-capture" onclick="takeSnapshot()" title="촬영">📷</button>
+    </div>
+  </div>
+
+  <!-- 촬영 결과물 팝업 -->
+  <div id="preview-modal">
+    <img id="preview-img" alt="촬영 결과물">
+    <p style="color: #fff; font-size: 13px; margin-bottom: 12px;">길게 눌러 이미지를 저장하고 인스타그램에 공유해보세요!</p>
+    <button class="btn-close" onclick="closePreview()">다시 찍기</button>
+  </div>
+
+  <script>
+    const viewer = document.getElementById('ar-viewer');
+
+    // 1. 모바일 AR 세션 시작
+    function activateAR() {
+      if (viewer.canActivateAR) {
+        viewer.activateAR();
+      } else {
+        alert("이 기기 브라우저에서는 WebAR 환경을 직접 지원하지 않아 3D 모드로 동작합니다.");
+      }
+    }
+
+    // 2. 포즈 및 음성(TTS) 반응 인터랙션
+    function changePose(poseType, message) {
+      // 버튼 스타일 업데이트
+      document.querySelectorAll('.btn-preset').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+
+      // 웹 음성 합성(TTS)으로 마스코트 목소리 출력
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(message);
+        utterance.rate = 1.1; // 귀여운 느낌을 위해 배속 조절
+        utterance.pitch = 1.3; // 하이톤 보이스
+        utterance.lang = 'ko-KR';
+        window.speechSynthesis.speak(utterance);
+      }
+
+      // 실제 3D 모델(GLB)에 애니메이션이 내장된 경우 해당 모션 재생
+      // viewer.animationName = poseType;
+      // viewer.play();
+    }
+
+    // 3. 지자체 기념 포토 프레임 자동 합성 및 스크린샷 기능
+    async function takeSnapshot() {
+      // 3D 뷰어 캔버스 데이터 추출
+      const blob = await viewer.toBlob({ idealAspect: true });
+      const img = new Image();
+      img.src = URL.createObjectURL(blob);
+
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = img.width;
+        canvas.height = img.height;
+
+        // 3D 캡처본 렌더링
+        ctx.drawImage(img, 0, 0);
+
+        // [과천시 40주년 기념 디지털 프레임 워터마크 합성]
+        ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        ctx.fillRect(0, canvas.height - 90, canvas.width, 90);
+
+        ctx.fillStyle = "#FFFFFF";
+        ctx.font = "bold 28px sans-serif";
+        ctx.fillText("과천시 시 승격 40주년 기념 찰칵!", 30, canvas.height - 45);
+
+        ctx.fillStyle = "#A0AEC0";
+        ctx.font = "18px sans-serif";
+        ctx.fillText("캐릭터: 밤나무 요정 송이·율이 | Snap3D", 30, canvas.height - 18);
+
+        // 결과 미리보기 모달 표시
+        document.getElementById('preview-img').src = canvas.toDataURL('image/png');
+        document.getElementById('preview-modal').style.display = 'flex';
+      };
+    }
+
+    function closePreview() {
+      document.getElementById('preview-modal').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
